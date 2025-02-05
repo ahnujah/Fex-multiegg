@@ -1,85 +1,106 @@
-const fs = require('fs');
-const path = require('path');
-const https = require('https');
-const { execSync } = require('child_process');
+#!/bin/bash
 
-const SERVER_TYPE = process.env.SERVER_TYPE || 'paper';
-const SERVER_VERSION = process.env.SERVER_VERSION || 'latest';
-const BUILD_NUMBER = process.env.BUILD_NUMBER || 'latest';
+# Czaractyl Installation Script
 
-function downloadFile(url, dest) {
-  return new Promise((resolve, reject) => {
-    const file = fs.createWriteStream(dest);
-    https.get(url, (response) => {
-      response.pipe(file);
-      file.on('finish', () => {
-        file.close(resolve);
-      });
-    }).on('error', (err) => {
-      fs.unlink(dest, () => reject(err));
-    });
-  });
-}
+echo "Welcome to Czaractyl Installation"
+echo "Please choose the server software you want to install:"
+echo "1. Paper"
+echo "2. Forge"
+echo "3. Fabric"
+echo "4. Sponge"
+echo "5. BungeeCord"
+echo "6. Bedrock"
 
-async function installServer() {
-  let downloadUrl;
-  let jarName;
+read -p "Enter the number of your choice: " choice
 
-  switch (SERVER_TYPE.toLowerCase()) {
-    case 'paper':
-      downloadUrl = `https://papermc.io/api/v2/projects/paper/versions/${SERVER_VERSION}/builds/${BUILD_NUMBER}/downloads/paper-${SERVER_VERSION}-${BUILD_NUMBER}.jar`;
-      jarName = 'paper.jar';
-      break;
-    case 'forge':
-      downloadUrl = `https://maven.minecraftforge.net/net/minecraftforge/forge/${SERVER_VERSION}-${BUILD_NUMBER}/forge-${SERVER_VERSION}-${BUILD_NUMBER}-installer.jar`;
-      jarName = 'forge-installer.jar';
-      break;
-    case 'fabric':
-      downloadUrl = `https://maven.fabricmc.net/net/fabricmc/fabric-installer/0.11.0/fabric-installer-0.11.0.jar`;
-      jarName = 'fabric-installer.jar';
-      break;
-    case 'sponge':
-      downloadUrl = `https://repo.spongepowered.org/maven/org/spongepowered/spongevanilla/${SERVER_VERSION}/spongevanilla-${SERVER_VERSION}.jar`;
-      jarName = 'sponge.jar';
-      break;
-    case 'bungeecord':
-      downloadUrl = 'https://ci.md-5.net/job/BungeeCord/lastSuccessfulBuild/artifact/bootstrap/target/BungeeCord.jar';
-      jarName = 'bungeecord.jar';
-      break;
-    case 'bedrock':
-      downloadUrl = `https://minecraft.azureedge.net/bin-linux/bedrock-server-${SERVER_VERSION}.zip`;
-      jarName = 'bedrock-server.zip';
-      break;
-    default:
-      console.error('Invalid server type specified');
-      process.exit(1);
-  }
+case $choice in
+    1)
+        SERVER_TYPE="paper"
+        ;;
+    2)
+        SERVER_TYPE="forge"
+        ;;
+    3)
+        SERVER_TYPE="fabric"
+        ;;
+    4)
+        SERVER_TYPE="sponge"
+        ;;
+    5)
+        SERVER_TYPE="bungeecord"
+        ;;
+    6)
+        SERVER_TYPE="bedrock"
+        ;;
+    *)
+        echo "Invalid choice. Exiting."
+        exit 1
+        ;;
+esac
 
-  console.log(`Downloading ${SERVER_TYPE} server...`);
-  await downloadFile(downloadUrl, jarName);
+echo "You have chosen to install $SERVER_TYPE"
 
-  if (SERVER_TYPE.toLowerCase() === 'fabric') {
-    console.log('Installing Fabric server...');
-    execSync(`java -jar ${jarName} server -mcversion ${SERVER_VERSION} -downloadMinecraft`);
-    jarName = 'fabric-server-launch.jar';
-  } else if (SERVER_TYPE.toLowerCase() === 'forge') {
-    console.log('Installing Forge server...');
-    execSync(`java -jar ${jarName} --installServer`);
-    jarName = `forge-${SERVER_VERSION}-${BUILD_NUMBER}.jar`;
-  } else if (SERVER_TYPE.toLowerCase() === 'bedrock') {
-    console.log('Extracting Bedrock server...');
-    execSync(`unzip ${jarName} -d bedrock-server && rm ${jarName}`);
-    jarName = 'bedrock_server';
-  }
+read -p "Enter the server version (or press Enter for latest): " SERVER_VERSION
+SERVER_VERSION=${SERVER_VERSION:-latest}
 
-  console.log('Setting up server.properties...');
-  const serverProperties = `server-port=${process.env.SERVER_PORT}\nmotd=${process.env.SERVER_NAME}\n`;
-  fs.writeFileSync('server.properties', serverProperties);
+read -p "Enter the build number (or press Enter for latest): " BUILD_NUMBER
+BUILD_NUMBER=${BUILD_NUMBER:-latest}
 
-  console.log('Setting up startup command...');
-  fs.writeFileSync('.startup_cmd', `java -Xms128M -Xmx${process.env.SERVER_MEMORY}M -jar ${jarName}`);
+echo "Installing $SERVER_TYPE version $SERVER_VERSION build $BUILD_NUMBER"
 
-  console.log('Installation complete!');
-}
+case $SERVER_TYPE in
+    paper)
+        URL="https://papermc.io/api/v2/projects/paper/versions/${SERVER_VERSION}/builds/${BUILD_NUMBER}/downloads/paper-${SERVER_VERSION}-${BUILD_NUMBER}.jar"
+        JAR_NAME="paper.jar"
+        ;;
+    forge)
+        URL="https://maven.minecraftforge.net/net/minecraftforge/forge/${SERVER_VERSION}-${BUILD_NUMBER}/forge-${SERVER_VERSION}-${BUILD_NUMBER}-installer.jar"
+        JAR_NAME="forge-installer.jar"
+        ;;
+    fabric)
+        URL="https://maven.fabricmc.net/net/fabricmc/fabric-installer/0.11.0/fabric-installer-0.11.0.jar"
+        JAR_NAME="fabric-installer.jar"
+        ;;
+    sponge)
+        URL="https://repo.spongepowered.org/maven/org/spongepowered/spongevanilla/${SERVER_VERSION}/spongevanilla-${SERVER_VERSION}.jar"
+        JAR_NAME="sponge.jar"
+        ;;
+    bungeecord)
+        URL="https://ci.md-5.net/job/BungeeCord/lastSuccessfulBuild/artifact/bootstrap/target/BungeeCord.jar"
+        JAR_NAME="bungeecord.jar"
+        ;;
+    bedrock)
+        URL="https://minecraft.azureedge.net/bin-linux/bedrock-server-${SERVER_VERSION}.zip"
+        JAR_NAME="bedrock-server.zip"
+        ;;
+esac
 
-installServer().catch(console.error);
+echo "Downloading server files..."
+curl -o ${JAR_NAME} ${URL}
+
+if [ "$SERVER_TYPE" == "fabric" ]; then
+    echo "Installing Fabric server..."
+    java -jar ${JAR_NAME} server -mcversion ${SERVER_VERSION} -downloadMinecraft
+    JAR_NAME="fabric-server-launch.jar"
+elif [ "$SERVER_TYPE" == "forge" ]; then
+    echo "Installing Forge server..."
+    java -jar ${JAR_NAME} --installServer
+    JAR_NAME="forge-${SERVER_VERSION}-${BUILD_NUMBER}.jar"
+elif [ "$SERVER_TYPE" == "bedrock" ]; then
+    echo "Extracting Bedrock server..."
+    unzip ${JAR_NAME} -d bedrock-server && rm ${JAR_NAME}
+    JAR_NAME="bedrock_server"
+fi
+
+echo "Setting up server.properties..."
+echo "server-port=${SERVER_PORT}" > server.properties
+echo "motd=${SERVER_NAME}" >> server.properties
+
+echo "Setting up startup command..."
+if [ "$SERVER_TYPE" == "bedrock" ]; then
+    echo "LD_LIBRARY_PATH=. ./bedrock_server" > .startup_cmd
+else
+    echo "java -Xms128M -Xmx${SERVER_MEMORY}M -jar ${JAR_NAME}" > .startup_cmd
+fi
+
+echo "Installation complete!"
