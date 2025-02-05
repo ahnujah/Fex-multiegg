@@ -1,243 +1,85 @@
-#!/bin/bash
+const fs = require('fs');
+const path = require('path');
+const https = require('https');
+const { execSync } = require('child_process');
 
-function display {
-    echo -e "\033c"
-    echo "
-    ==========================================================================
-    
+const SERVER_TYPE = process.env.SERVER_TYPE || 'paper';
+const SERVER_VERSION = process.env.SERVER_VERSION || 'latest';
+const BUILD_NUMBER = process.env.BUILD_NUMBER || 'latest';
 
-$(tput setaf 6)███████╗███████╗██╗░░██╗██╗░░██╗██╗░░░██╗██████╗░
-$(tput setaf 6)██╔════╝██╔════╝╚██╗██╔╝██║░░██║██║░░░██║██╔══██╗
-$(tput setaf 6)█████╗░░█████╗░░░╚███╔╝░███████║██║░░░██║██████╦╝
-$(tput setaf 6)██╔══╝░░██╔══╝░░░██╔██╗░██╔══██║██║░░░██║██╔══██╗
-$(tput setaf 6)██║░░░░░███████╗██╔╝╚██╗██║░░██║╚██████╔╝██████╦╝
-$(tput setaf 6)╚═╝░░░░░╚══════╝╚═╝░░╚═╝╚═╝░░╚═╝░╚═════╝░╚═════╝░  
-
-    ==========================================================================
-    "  
+function downloadFile(url, dest) {
+  return new Promise((resolve, reject) => {
+    const file = fs.createWriteStream(dest);
+    https.get(url, (response) => {
+      response.pipe(file);
+      file.on('finish', () => {
+        file.close(resolve);
+      });
+    }).on('error', (err) => {
+      fs.unlink(dest, () => reject(err));
+    });
+  });
 }
 
-function forceStuffs {
-  curl -O https://cdn.discordapp.com/attachments/946264593746001960/969858011357151252/FE_1.png
-  
-  echo "motd=Powered by Fexhub | Change this motd in server.properties" >> server.properties
+async function installServer() {
+  let downloadUrl;
+  let jarName;
+
+  switch (SERVER_TYPE.toLowerCase()) {
+    case 'paper':
+      downloadUrl = `https://papermc.io/api/v2/projects/paper/versions/${SERVER_VERSION}/builds/${BUILD_NUMBER}/downloads/paper-${SERVER_VERSION}-${BUILD_NUMBER}.jar`;
+      jarName = 'paper.jar';
+      break;
+    case 'forge':
+      downloadUrl = `https://maven.minecraftforge.net/net/minecraftforge/forge/${SERVER_VERSION}-${BUILD_NUMBER}/forge-${SERVER_VERSION}-${BUILD_NUMBER}-installer.jar`;
+      jarName = 'forge-installer.jar';
+      break;
+    case 'fabric':
+      downloadUrl = `https://maven.fabricmc.net/net/fabricmc/fabric-installer/0.11.0/fabric-installer-0.11.0.jar`;
+      jarName = 'fabric-installer.jar';
+      break;
+    case 'sponge':
+      downloadUrl = `https://repo.spongepowered.org/maven/org/spongepowered/spongevanilla/${SERVER_VERSION}/spongevanilla-${SERVER_VERSION}.jar`;
+      jarName = 'sponge.jar';
+      break;
+    case 'bungeecord':
+      downloadUrl = 'https://ci.md-5.net/job/BungeeCord/lastSuccessfulBuild/artifact/bootstrap/target/BungeeCord.jar';
+      jarName = 'bungeecord.jar';
+      break;
+    case 'bedrock':
+      downloadUrl = `https://minecraft.azureedge.net/bin-linux/bedrock-server-${SERVER_VERSION}.zip`;
+      jarName = 'bedrock-server.zip';
+      break;
+    default:
+      console.error('Invalid server type specified');
+      process.exit(1);
+  }
+
+  console.log(`Downloading ${SERVER_TYPE} server...`);
+  await downloadFile(downloadUrl, jarName);
+
+  if (SERVER_TYPE.toLowerCase() === 'fabric') {
+    console.log('Installing Fabric server...');
+    execSync(`java -jar ${jarName} server -mcversion ${SERVER_VERSION} -downloadMinecraft`);
+    jarName = 'fabric-server-launch.jar';
+  } else if (SERVER_TYPE.toLowerCase() === 'forge') {
+    console.log('Installing Forge server...');
+    execSync(`java -jar ${jarName} --installServer`);
+    jarName = `forge-${SERVER_VERSION}-${BUILD_NUMBER}.jar`;
+  } else if (SERVER_TYPE.toLowerCase() === 'bedrock') {
+    console.log('Extracting Bedrock server...');
+    execSync(`unzip ${jarName} -d bedrock-server && rm ${jarName}`);
+    jarName = 'bedrock_server';
+  }
+
+  console.log('Setting up server.properties...');
+  const serverProperties = `server-port=${process.env.SERVER_PORT}\nmotd=${process.env.SERVER_NAME}\n`;
+  fs.writeFileSync('server.properties', serverProperties);
+
+  console.log('Setting up startup command...');
+  fs.writeFileSync('.startup_cmd', `java -Xms128M -Xmx${process.env.SERVER_MEMORY}M -jar ${jarName}`);
+
+  console.log('Installation complete!');
 }
 
-function launchJavaServer {
-  java -Xms1024M -XX:+UseG1GC -XX:+ParallelRefProcEnabled -XX:MaxGCPauseMillis=200 -XX:+UnlockExperimentalVMOptions -XX:+DisableExplicitGC -XX:G1NewSizePercent=30 -XX:G1MaxNewSizePercent=40 -XX:G1HeapRegionSize=8M -XX:G1ReservePercent=20 -XX:G1HeapWastePercent=5 -XX:G1MixedGCCountTarget=4 -XX:InitiatingHeapOccupancyPercent=15 -XX:G1MixedGCLiveThresholdPercent=90 -XX:G1RSetUpdatingPauseTimePercent=5 -XX:SurvivorRatio=32 -XX:+PerfDisableSharedMem -XX:MaxTenuringThreshold=1 -Dusing.aikars.flags=https://mcflags.emc.gs -Daikars.new.flags=true -jar paper-server.jar nogui
-}
-FILE=eula.txt
-
-
-function optimizeJavaServer {
-  echo "view-distance=6" >> server.properties
-  
-} 
-
-if [ ! -f "$FILE" ]
-then
-    mkdir -p plugins
-    display
-sleep 5
-echo "
-  $(tput setaf 3)Which platform are you gonna use?
-  1) Paper 1.8.8       6)  1.18.2 
-  2) Paper 1.12.2      7)  1.19.2
-  3) Paper 1.15.2      8)  BungeeCord
-                       9)  Node.js
-  4) Paper 1.16.5
-  5) Paper 1.17.1 
-  "
-read -r n
-
-case $n in
-  1) 
-    sleep 1
-
-    echo "$(tput setaf 3)Starting the download for 1.8.8 please wait"
-
-    sleep 4
-
-    forceStuffs
-
-    curl -O https://api.papermc.io/v2/projects/paper/versions/1.8.8/builds/445/downloads/paper-1.8.8-445.jar
-
-    display
-    
-    echo "$(tput setaf 1)Invalid docker image. Change it to java 8"
-    
-    sleep 10
-    
-    echo -e ""
-    
-    optimizeJavaServer
-    launchJavaServer
-  ;;
-
-  2) 
-    sleep 1
-
-    echo "$(tput setaf 3)Starting the download for 1.12.2 please wait"
-
-    sleep 4
-
-    forceStuffs
-
-    curl -O https://api.papermc.io/v2/projects/paper/versions/1.12.2/builds/1620/downloads/paper-1.12.2-1620.jar
-
-    display   
-
-    echo "$(tput setaf 1)Invalid docker image, otherwise it will not work.Change it to java 11"
-    
-    sleep 10
-
-    echo -e ""
-
-    optimizeJavaServer
-    launchJavaServer
-  ;;
-
-  3) 
-    sleep 1
-
-    echo "$(tput setaf 3)Starting the download for 1.15.2 please wait"
-
-    sleep 4
-
-    forceStuffs
-
-    curl -O https://api.papermc.io/v2/projects/paper/versions/1.15.2/builds/393/downloads/paper-1.15.2-393.jar
-
-    display   
-
-    echo "$(tput setaf 1)Invalid docker image. Change it to java 16"
-    
-    sleep 10
-
-    echo -e ""
-
-    optimizeJavaServer
-    launchJavaServer
-  ;;
-
-  4)
-    sleep 1
-
-    echo "$(tput setaf 3)Starting the download for 1.16.5 please wait"
-
-    sleep 4
-
-    forceStuffs
-
-    curl -O https://api.papermc.io/v2/projects/paper/versions/1.16.5/builds/794/downloads/paper-1.16.5-794.jar
-
-    display
-    
-    echo "$(tput setaf 1)Invalid docker image. Change it to java 16"
-
-    sleep 10
-
-    echo -e ""
-
-    optimizeJavaServer
-    launchJavaServer
-  ;;
-
-  5) 
-    sleep 1
-
-    echo "$(tput setaf 3)Starting the download for 1.17.1 please wait"
-
-    sleep 4
-
-    forceStuffs
-
-    curl -O https://api.papermc.io/v2/projects/paper/versions/1.17.1/builds/411/downloads/paper-1.17.1-411.jar
-
-    display
-
-    sleep 10
-
-    echo -e ""
-
-    optimizeJavaServer
-    launchJavaServer
-  ;;
-
-  6)
-    sleep 1
-
-    echo "$(tput setaf 3)Starting the download for 1.18.2 please wait"
-
-    sleep 4
-
-    forceStuffs
-
-    curl -O https://api.papermc.io/v2/projects/paper/versions/1.18.2/builds/388/downloads/paper-1.18.2-388.jar
-
-    display
-
-    sleep 10
-
-    echo -e ""
-
-    optimizeJavaServer
-    launchJavaServer
-  ;;
-  7)
-    sleep 1
-
-    echo "$(tput setaf 3)Starting the download for 1.19.2 please wait"
-
-    sleep 4
-
-    forceStuffs
-
-    curl -O https://api.papermc.io/v2/projects/paper/versions/1.19.2/builds/190/downloads/paper-1.19.2-190.jar
-
-    display
-
-    sleep 10
-
-    echo -e ""
-
-    optimizeJavaServer
-    launchJavaServer
-  8)
-    echo "$(tput setaf 3)Starting Download please wait"
-
-    curl -O https://ci.md-5.net/job/BungeeCord/lastSuccessfulBuild/artifact/bootstrap/target/BungeeCord.jar
-
-    display 
-
-    java -Xms512M -Xmx512M -jar BungeeCord.jar
-  ;;
-  9)
-  echo "$(tput setaf 3)Starting Download please wait"
-  
-  curl -sL https://deb.nodesource.com/setup_18.x | sudo -E bash -
-  
-  sudo apt-get install -y nodejs
-
-  *) 
-    echo "Error 404"
-    exit
-  ;;
-esac  
-else
-if [ -f plugins ]; then
-mkdir plugins
-fi
-if [ -f BungeeCord.jar ]; then
-  display
-  java -Xms512M -Xmx512M -jar BungeeCord.jar
-else
-fi
-if [ -d plugins ]; then
-  mkdir -p plugins
-fi
-  display   
-  launchJavaServer
-fi
-fi
-fi
+installServer().catch(console.error);
